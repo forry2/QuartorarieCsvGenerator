@@ -1,0 +1,25 @@
+version: '3.8'
+services:
+  mongodb:
+    image: mongo:4.4
+    ports:
+      - 27017:27017
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongouser
+      MONGO_INITDB_ROOT_PASSWORD: mongopassword
+    networks:
+      - regionetoscananetwork
+  nifi-quartorarie:
+    image: forry2/nifi:1.24.0.2
+    container_name: nifi-quartorarie
+    hostname: nifi-quartorarie
+    ports:
+      - 8080:8080
+      - 8443:8443
+    networks:
+      - regionetoscananetwork
+    depends_on:
+      - mongodb
+networks:
+  regionetoscananetwork:
