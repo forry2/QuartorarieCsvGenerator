@@ -84,9 +84,9 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
                 Document.class
         );
 
-        HashMap<String, Double> podValuesList = new HashMap<>();
+        HashMap<String, String> podValuesList = new HashMap<>();
         for (Document doc : valDataAggregationResult.getMappedResults()) {
-            podValuesList.put(doc.getString("MEAS_YMDD_ID") + "_" + doc.getString("POD") + "_" + doc.getString("MEAS_TYPE"), doc.getDouble("val"));
+            podValuesList.put(doc.getString("MEAS_YMDD_ID") + "_" + doc.getString("POD"), String.valueOf(doc.getDouble("val")) + "_" + doc.getString("MEAS_TYPE"));
         }
 
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMM");
@@ -123,22 +123,14 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
                     line += idToString(runningId);
                     line += ";";
                     for (String runningPod : distinctPodList) {
-                        String values = "";
-                        for (String runningMeastype : meastypeList) {
-                            Double val = podValuesList.get(
-                                    cycleDateFormat.format(runningCal.getTime())
-                                            + "_"
-                                            + StringUtils.leftPad(String.valueOf(runningId), 2, "0")
-                                            + "_"
-                                            + runningPod + "_" + runningMeastype
-                            );
-                            if (val != null) {
-                                values += val + "_" + runningMeastype;
-                            }
-                        }
+                        String values = podValuesList.get(cycleDateFormat.format(runningCal.getTime())
+                                + "_"
+                                + StringUtils.leftPad(String.valueOf(runningId), 2, "0")
+                                + "_"
+                                + runningPod
+                        );
 
-                        line += values + ";";
-
+                         line += (values != null?  values : "") + ";";
                     }
                     writer.write(line + "\n");
                 }
