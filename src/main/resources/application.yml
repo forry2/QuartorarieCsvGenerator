@@ -1,9 +1,13 @@
 spring:
   data:
     mongodb:
-      host: localhost     # L'host su cui è in esecuzione MongoDB
-      port: 27017         # La porta su cui MongoDB è in ascolto (di solito 27017)
+      host: localhost     # L'host su cui ï¿½ in esecuzione MongoDB
+      port: 27017         # La porta su cui MongoDB ï¿½ in ascolto (di solito 27017)
       database: a2a  # Il nome del database a cui connettersi
       username: mongouser # Il nome utente per l'autenticazione (se necessario)
       password: mongopassword # La password per l'autenticazione (se necessario)
       authentication-database: admin # Il database di autenticazione (se diverso dal database principale)
+logging:
+  level:
+    root: INFO
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG

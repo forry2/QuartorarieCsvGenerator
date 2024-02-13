@@ -1,5 +1,6 @@
 package com.dxc.quartorariecsvgenerator;
 
+import org.apache.commons.lang3.StringUtils;
 import org.bson.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
@@ -10,10 +11,12 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.aggregation.AggregationResults;
-import org.springframework.data.mongodb.core.query.Query;
 
-import java.util.HashMap;
-import java.util.List;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.text.SimpleDateFormat;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static java.lang.System.exit;
@@ -82,11 +85,77 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
         );
 
         HashMap<String, Double> podValuesList = new HashMap<>();
-        for  (Document doc : valDataAggregationResult.getMappedResults()){
-            podValuesList.put(doc.getString("MEAS_YMDD_ID") + "_" + doc.getString("POD")+ "_" + doc.getString("MEAS_TYPE"), doc.getDouble("val"));
+        for (Document doc : valDataAggregationResult.getMappedResults()) {
+            podValuesList.put(doc.getString("MEAS_YMDD_ID") + "_" + doc.getString("POD") + "_" + doc.getString("MEAS_TYPE"), doc.getDouble("val"));
         }
 
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMM");
+        SimpleDateFormat completeDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+        SimpleDateFormat cycleDateFormat = new SimpleDateFormat("yyyyMMdd");
+        Date startDateTime = dateFormat.parse(startDate);
+        Calendar startCalendar = Calendar.getInstance();
+        startCalendar.setTime(startDateTime);
+        Date endDateTime = dateFormat.parse(endDate);
+        Calendar endCalendar = Calendar.getInstance();
+        endCalendar.setTime(endDateTime);
 
+        List<String> meastypeList = Arrays.asList("0", "1", "2");
+
+        String csvFileName = fileName + "_" + magnitude + ".csv";
+        File file = new File(csvFileName);
+        if (file.exists()) {
+            file.delete();
+        }
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFileName))) {
+
+            String header = "MEASYM_MEASDD_MEASTYPE;";
+            for (String runningPod : distinctPodList){
+                header += runningPod + ";";
+            }
+            writer.write(header + "\n");
+
+            // Cycle on days
+            String line = "";
+            for (Calendar runningCal = startCalendar; runningCal.before(endCalendar); runningCal.add(Calendar.DAY_OF_YEAR, 1)) {
+                for (int runningId = 1; runningId <= 96; runningId++) {
+                    line = completeDateFormat.format(runningCal.getTime());
+                    line += " ";
+                    line += idToString(runningId);
+                    line += ";";
+                    for (String runningPod : distinctPodList) {
+                        String values = "";
+                        for (String runningMeastype : meastypeList) {
+                            Double val = podValuesList.get(
+                                    cycleDateFormat.format(runningCal.getTime())
+                                            + "_"
+                                            + StringUtils.leftPad(String.valueOf(runningId), 2, "0")
+                                            + "_"
+                                            + runningPod + "_" + runningMeastype
+                            );
+                            if (val == null)
+                                values += "0_";
+                            else
+                                values += val + "_";
+                        }
+                        line += values.substring(0, values.length() - 1) + ";";
+
+                    }
+                    writer.write(line + "\n");
+                }
+            }
+        }
         System.out.println("Numero di record nella mappa: " + podValuesList.size());
+    }
+
+    private String idToString(int number) {
+        int hours = (number - 1) / 4;
+        int minutes = (number - 1) % 4 * 15;
+
+        // Formattiamo le ore e i minuti in una stringa con due cifre
+        String formattedHours = String.format("%02d", hours);
+        String formattedMinutes = String.format("%02d", minutes);
+
+        return formattedHours + ":" + formattedMinutes;
+
     }
 }
