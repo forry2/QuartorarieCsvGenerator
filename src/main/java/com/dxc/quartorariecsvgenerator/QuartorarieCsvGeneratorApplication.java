@@ -132,12 +132,12 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
                                             + "_"
                                             + runningPod + "_" + runningMeastype
                             );
-                            if (val == null)
-                                values += "0_";
-                            else
-                                values += val + "_";
+                            if (val != null) {
+                                values += val + "_" + runningMeastype;
+                            }
                         }
-                        line += values.substring(0, values.length() - 1) + ";";
+
+                        line += values + ";";
 
                     }
                     writer.write(line + "\n");
