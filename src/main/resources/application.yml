@@ -1,14 +1,14 @@
 spring:
   data:
     mongodb:
-      host: localhost     # L'host su cui � in esecuzione MongoDB
-      port: 27017         # La porta su cui MongoDB � in ascolto (di solito 27017)
-      database: a2a  # Il nome del database a cui connettersi
-      username: mongouser # Il nome utente per l'autenticazione (se necessario)
-      password: mongopassword # La password per l'autenticazione (se necessario)
-      authentication-database: admin # Il database di autenticazione (se diverso dal database principale)
+      host: ${QUARTORARIE_MONGODB_HOST:localhost}     # L'host su cui è in esecuzione MongoDB
+      port: ${QUARTORARIE_MONGODB_PORT:27017}         # La porta su cui MongoDB è in ascolto (di solito 27017)
+      database: ${QUARTORARIE_MONGODB_DBNAME:a2a}  # Il nome del database a cui connettersi
+      username: ${QUARTORARIE_MONGODB_USERNAME:mongouser} # Il nome utente per l'autenticazione (se necessario)
+      password: ${QUARTORARIE_MONGODB_PASSWORD:mongopassword} # La password per l'autenticazione (se necessario)
+#      authentication-database: ${QUARTORARIE_MONGODB_ADMIN_DB:admin} # Il database di autenticazione (se diverso dal database principale)
 logging:
   level:
     root: INFO
     com.dxc.quartorariecsvgenerator.QuartorarieCsvGeneratorApplication: DEBUG
-    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+    org.springframework.data.mongodb.core.MongoTemplate: TRACE

@@ -14,6 +14,8 @@ import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
 import org.springframework.data.mongodb.core.aggregation.AggregationResults;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -37,6 +39,11 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
     private MongoTemplate mongoTemplate;
 
     public static void main(String[] args) {
+//        System.getenv().forEach((key, value) -> {
+//            if (key.startsWith("QUARTORARIE")) {
+//                System.out.println(key + "=" + value);
+//            }
+//        });
         SpringApplication.run(QuartorarieCsvGeneratorApplication.class, args);
     }
 
@@ -46,6 +53,7 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
             System.err.println("Usage: java -jar QuartorarieCsvGeneratorApplication.jar magnitude fileName startDate endDate");
             exit(1);
         }
+
 
         String magnitude = args[0];
         String fileName = args[1];

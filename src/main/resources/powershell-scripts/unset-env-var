@@ -1,0 +1,6 @@
+# Cancellazione delle variabili d'ambiente specificate
+Remove-Item -Path Env:\QUARTORARIE_MONGODB_HOST -ErrorAction SilentlyContinue
+Remove-Item -Path Env:\QUARTORARIE_MONGODB_PORT -ErrorAction SilentlyContinue
+Remove-Item -Path Env:\QUARTORARIE_MONGODB_DBNAME -ErrorAction SilentlyContinue
+Remove-Item -Path Env:\QUARTORARIE_MONGODB_USERNAME -ErrorAction SilentlyContinue
+Remove-Item -Path Env:\QUARTORARIE_MONGODB_PASSWORD -ErrorAction SilentlyContinue

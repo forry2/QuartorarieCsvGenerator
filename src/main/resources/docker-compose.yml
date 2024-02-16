@@ -17,6 +17,8 @@ services:
     environment:
       SINGLE_USER_CREDENTIALS_USERNAME: root
       SINGLE_USER_CREDENTIALS_PASSWORD: rootrootroot
+    volumes:
+      - C:\Users\rbruni\IdeaProjects\QuartorarieCsvGenerator\src\main\resources\source-excels\:/tmp/quartorarie/
     ports:
       - 8080:8080
       - 8443:8443
