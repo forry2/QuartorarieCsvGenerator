@@ -10,7 +10,7 @@
     </parent>
     <groupId>com.dxc</groupId>
     <artifactId>quartorarieCsvGenerator</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>1.0.0</version>
     <name>quartorarieCsvGenerator</name>
     <description>quartorarieCsvGenerator</description>
     <properties>

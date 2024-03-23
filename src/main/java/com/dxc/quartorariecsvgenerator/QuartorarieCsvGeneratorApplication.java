@@ -14,6 +14,7 @@ import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
 import org.springframework.data.mongodb.core.aggregation.AggregationResults;
+import org.springframework.data.mongodb.core.index.Index;
 import org.springframework.data.mongodb.core.query.Query;
 
 import java.io.BufferedWriter;
@@ -50,6 +51,7 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
+        long fileStartTimeMillis = System.currentTimeMillis();
         if (args.length != 4) {
             System.err.println("Usage: java -jar QuartorarieCsvGeneratorApplication.jar magnitude fileName startDate(yyyyMMdd) endDate(yyyyMMdd)");
             exit(1);
@@ -60,6 +62,7 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
         String fileName = args[1];
         String startDate = args[2];
         String endDate = args[3];
+        String collectionName = fileName + "_" + magnitude;
 
         try {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
@@ -90,15 +93,25 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFileName))) {
+            if (mongoTemplate.indexOps(fileName + "_" + magnitude).getIndexInfo().stream()
+                    .anyMatch(indexInfo -> indexInfo.getName().equals(fileName + "_" + magnitude + "_java"))) {
+                mongoTemplate.indexOps(fileName + "_" + magnitude).dropIndex(fileName + "_" + magnitude + "_java");
+            }
+            logger.debug("Creating index " + fileName + "_" + magnitude + "_java");
+            mongoTemplate.indexOps(fileName + "_" + magnitude)
+                    .ensureIndex(
+                            new Index()
+                                    .on("POD", Sort.Direction.ASC)
+                                    .on("MEAS_YMDD_ID", Sort.Direction.ASC)
+                                    .named(fileName + "_" + magnitude + "_java")
+                    );
+            logger.debug("Index " + fileName + "_" + magnitude + " created");
 
             // Get distinct PODs list
-            AggregationOperation match = match(where("MEAS_YMDD_ID").gte(startDate).lt(endDate).and("dataFilenameMagnitude").is(fileName + "_" + magnitude));
-            AggregationOperation podProject = project().and("POD").as("POD").andExclude("_id");
-            AggregationOperation project = project().and("MEAS_YMDD_ID").as("MEAS_YMDD_ID").and("dataFilenameMagnitude").as("dataFilenameMagnitude").and("POD").as("POD").and("MEAS_TYPE").as("MEAS_TYPE").and("val").as("val").andExclude("_id");
             AggregationOperation distinctPodGroupByPod = group("POD");
             AggregationOperation distinctPodSortByPod = sort(Sort.by("_id"));
-            Aggregation distinctPodAggregation = Aggregation.newAggregation(match, podProject, distinctPodGroupByPod, distinctPodSortByPod);
-            AggregationResults<Document> distinctPod = mongoTemplate.aggregate(distinctPodAggregation, "curveQuartorarieGroovy", Document.class);
+            Aggregation distinctPodAggregation = Aggregation.newAggregation(distinctPodGroupByPod, distinctPodSortByPod);
+            AggregationResults<Document> distinctPod = mongoTemplate.aggregate(distinctPodAggregation, collectionName, Document.class);
             List<String> distinctPodList = distinctPod.getMappedResults().stream().map(doc -> doc.getString("_id")).collect(Collectors.toList());
             logger.debug("List of distinct PODS has " + distinctPodList.size() + " elements");
             if (distinctPodList.size() == 0) {
@@ -123,52 +136,92 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
             String maxDay = datesFormat.format(calendar.getTime());
             logger.debug("minDay = " + minDay + ", " + "maxDay = " + maxDay);
 
-            Query countQuery = new Query(where("MEAS_YMDD_ID").gte(startDate).lt(endDate).and("dataFilenameMagnitude").is(fileName + "_" + magnitude).and("POD").in(distinctPodList));
-            long countRecords = mongoTemplate.count(countQuery, "curveQuartorarieGroovy");
+            Query countQuery = new Query(where("MEAS_YMDD_ID").gte(startDate).lt(endDate).and("POD").in(distinctPodList));
+            long countRecords = mongoTemplate.count(countQuery, collectionName);
 
             if (countRecords == 0) {
                 System.err.println("db returned no measurements to perform this operation");
                 exit(5);
             }
             // Looping through days
-            HashMap<String, String> podValuesList = new HashMap<>();
+
+            HashMap<String, String> podValuesHashMap = new HashMap<>();
             while (StringUtils.compare(maxDay, endDate) <= 0) {
-                podValuesList.clear();
-                AggregationOperation timeSubsetMatch = match(where("MEAS_YMDD_ID").gte(minDay).lt(maxDay).and("dataFilenameMagnitude").is(fileName + "_" + magnitude).and("POD").in(distinctPodList));
-                AggregationOperation valDataSort = sort(Sort.by("MEAS_YMDD_ID", "dataFilenameMagnitude", "POD", "MEAS_TYPE"));
+                long startTimeMillis = System.currentTimeMillis();
+                podValuesHashMap.clear();
+                logger.debug("Querying data from minDay = " + minDay + " to maxDay = " + maxDay);
+
+                AggregationOperation timeSubsetMatch = match(where("MEAS_YMDD_ID").gte(minDay).lt(maxDay).and("POD").in(distinctPodList));
+                AggregationOperation valDataSort = sort(Sort.by("MEAS_YMDD_ID", "POD", "MEAS_TYPE"));
+                AggregationOperation project = project()
+                        .and("MEAS_YMDD_ID").as("MEAS_YMDD_ID")
+                        .and("POD").as("POD")
+                        .and("MEAS_TYPE").as("MEAS_TYPE")
+                        .and("val").as("val")
+                        .and("id").as("id")
+                        .andExclude("_id");
                 AggregationOptions options = AggregationOptions.builder().allowDiskUse(true).build();
                 Aggregation valDataAggregation = newAggregation(timeSubsetMatch, project, valDataSort).withOptions(options);
-                AggregationResults<Document> valDataAggregationResult = mongoTemplate.aggregate(valDataAggregation, "curveQuartorarieGroovy", Document.class);
+                AggregationResults<Document> valDataAggregationResult = mongoTemplate.aggregate(valDataAggregation, collectionName, Document.class);
 
+                /*
+                long startTimeMillis = System.currentTimeMillis();
+                Iterator<Document> it = valDataAggregationResult.getMappedResults().iterator();
+                Document iteratingDoc = it.next();
+                for (int runningId = 1; runningId <= 96; runningId++) {
+                    String csvLine = "";
+                    csvLine += sdfOutput.format(datesFormat.parse(minDay)) + " "+ idToString(runningId)+ ";";
+                    for (String distinctSortedPod : distinctPodList) {
+                        if (iteratingDoc.getString("POD").equalsIgnoreCase(distinctSortedPod) && iteratingDoc.getString("id").equals(String.format("%02d", runningId))){
+                            csvLine += iteratingDoc.getDouble("val") + "_" + iteratingDoc.getString("MEAS_TYPE") + ";";
+                            try {
+                                iteratingDoc = it.next();
+                            }
+                            catch (NoSuchElementException e ){
+                                iteratingDoc = new Document().append("POD", "").append("val", null);
+                            }
+                        }
+                        else {
+                            csvLine += ";";
+                        }
+                    }
+
+                    logger.debug(csvLine);
+                    writer.write(csvLine + "\n");
+                }
+                logger.debug("Iterator cycle completed in " + (System.currentTimeMillis() - startTimeMillis) + " milliseconds");
+                */
 
                 for (Document doc : valDataAggregationResult.getMappedResults()) {
-                    podValuesList.put(doc.getString("MEAS_YMDD_ID") + "_" + doc.getString("POD"), doc.getDouble("val") + "_" + doc.getString("MEAS_TYPE"));
+                    podValuesHashMap.put(doc.getString("MEAS_YMDD_ID") + "_" + doc.getString("POD"), doc.getDouble("val") + "_" + doc.getString("MEAS_TYPE"));
                 }
 
                 String csvLine = "";
                 for (int runningId = 1; runningId <= 96; runningId++) {
-//                    logger.debug("runningId = " + runningId);
                     csvLine += sdfOutput.format(datesFormat.parse(minDay));
                     csvLine += " ";
                     csvLine += idToString(runningId);
                     csvLine += ";";
                     for (String runningPod : distinctPodList) {
-                        String values = podValuesList.get(minDay + "_" + StringUtils.leftPad(String.valueOf(runningId), 2, "0") + "_" + runningPod);
+                        String values = podValuesHashMap.get(minDay + "_" + StringUtils.leftPad(String.valueOf(runningId), 2, "0") + "_" + runningPod);
 
                         csvLine += (values != null ? values : "") + ";";
 
                     }
+                    logger.trace(csvLine);
                     writer.write(csvLine + "\n");
                     csvLine = "";
-//                    logger.debug("Write to csv: " + csvLine);
                 }
+                logger.debug("Written data from minDay = " + minDay + " to maxDay = " + maxDay + " in " + (System.currentTimeMillis() - startTimeMillis) + " milliseconds");
+
                 minDay = maxDay;
                 calendar.setTime(datesFormat.parse(minDay));
                 calendar.add(Calendar.DAY_OF_YEAR, 1);
                 maxDay = datesFormat.format(calendar.getTime());
-                logger.debug("minDay = " + minDay + ", " + "maxDay = " + maxDay);
             }
+            mongoTemplate.indexOps(fileName + "_" + magnitude).dropIndex(fileName + "_" + magnitude + "_java");
         }
+        logger.debug("File " + fileName + " written in " + (fileStartTimeMillis - System.currentTimeMillis()) + "ms");
     }
 
     private String idToString(int number) {
