@@ -10,6 +10,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.SimpleMongoClientDatabaseFactory;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
@@ -41,19 +42,20 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
     private MongoTemplate mongoTemplate;
 
     public static void main(String[] args) {
-//        System.getenv().forEach((key, value) -> {
-//            if (key.startsWith("QUARTORARIE")) {
-//                System.out.println(key + "=" + value);
-//            }
-//        });
+        System.getenv().forEach((key, value) -> {
+            if (key.startsWith("QUARTORARIE")) {
+                logger.debug(key + "=" + value);
+            }
+        });
         SpringApplication.run(QuartorarieCsvGeneratorApplication.class, args);
     }
 
     @Override
     public void run(String... args) throws Exception {
         long fileStartTimeMillis = System.currentTimeMillis();
-        if (args.length != 4) {
-            System.err.println("Usage: java -jar QuartorarieCsvGeneratorApplication.jar magnitude fileName startDate(yyyyMMdd) endDate(yyyyMMdd)");
+        if (args.length != 4 && args.length !=9) {
+            System.err.println("Usage (1): java -jar QuartorarieCsvGeneratorApplication.jar magnitude fileName startDate(yyyyMMdd) endDate(yyyyMMdd)");
+            System.err.println("Usage (2): java -jar QuartorarieCsvGeneratorApplication.jar magnitude fileName startDate(yyyyMMdd) endDate(yyyyMMdd) username password mongoHost mongoPort dbName");
             exit(1);
         }
 
@@ -62,6 +64,15 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
         String fileName = args[1];
         String startDate = args[2];
         String endDate = args[3];
+
+        if (args.length == 9){
+            mongoTemplate = new MongoTemplate(
+                    new SimpleMongoClientDatabaseFactory(
+                            "mongodb://" + args[4] + ":" + args[5] + "@" + args[6] + ":" + args[7] + "/" + args[8]
+                    )
+            );
+        }
+
         String collectionName = fileName + "_" + magnitude;
 
         try {
@@ -137,7 +148,13 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
             logger.debug("minDay = " + minDay + ", " + "maxDay = " + maxDay);
 
             Query countQuery = new Query(where("MEAS_YMDD_ID").gte(startDate).lt(endDate).and("POD").in(distinctPodList));
-            long countRecords = mongoTemplate.count(countQuery, collectionName);
+            AggregationOperation countFirstMatchOperation = match(where("MEAS_YMDD_ID").gte(startDate).lt(endDate).and("POD").in(distinctPodList));
+            AggregationOperation limitOperation = limit(1);
+            AggregationOptions options = AggregationOptions.builder().allowDiskUse(true).build();
+            Aggregation countAggregation = newAggregation(countFirstMatchOperation, limitOperation).withOptions(options);
+            AggregationResults<Document> countAggregationResult = mongoTemplate.aggregate(countAggregation, collectionName, Document.class);
+
+            long countRecords = countAggregationResult.getMappedResults().size();
 
             if (countRecords == 0) {
                 System.err.println("db returned no measurements to perform this operation");
@@ -160,8 +177,8 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
                         .and("val").as("val")
                         .and("id").as("id")
                         .andExclude("_id");
-                AggregationOptions options = AggregationOptions.builder().allowDiskUse(true).build();
-                Aggregation valDataAggregation = newAggregation(timeSubsetMatch, project, valDataSort).withOptions(options);
+                AggregationOptions countOptions = AggregationOptions.builder().allowDiskUse(true).build();
+                Aggregation valDataAggregation = newAggregation(timeSubsetMatch, project, valDataSort).withOptions(countOptions);
                 AggregationResults<Document> valDataAggregationResult = mongoTemplate.aggregate(valDataAggregation, collectionName, Document.class);
 
                 /*
