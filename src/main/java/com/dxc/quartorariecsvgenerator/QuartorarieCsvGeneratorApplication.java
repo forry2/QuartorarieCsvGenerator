@@ -53,9 +53,9 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         long fileStartTimeMillis = System.currentTimeMillis();
-        if (args.length != 4 && args.length !=9) {
+        if (args.length != 4 && args.length !=10) {
             System.err.println("Usage (1): java -jar QuartorarieCsvGeneratorApplication.jar magnitude fileName startDate(yyyyMMdd) endDate(yyyyMMdd)");
-            System.err.println("Usage (2): java -jar QuartorarieCsvGeneratorApplication.jar magnitude fileName startDate(yyyyMMdd) endDate(yyyyMMdd) username password mongoHost mongoPort dbName");
+            System.err.println("Usage (2): java -jar QuartorarieCsvGeneratorApplication.jar magnitude fileName startDate(yyyyMMdd) endDate(yyyyMMdd) username password mongoHost mongoPort dbName recreateIndex(true or false)");
             exit(1);
         }
 
@@ -65,7 +65,7 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
         String startDate = args[2];
         String endDate = args[3];
 
-        if (args.length == 9){
+        if (args.length == 10){
             mongoTemplate = new MongoTemplate(
                     new SimpleMongoClientDatabaseFactory(
                             "mongodb://" + args[4] + ":" + args[5] + "@" + args[6] + ":" + args[7] + "/" + args[8]
@@ -84,16 +84,6 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
             exit(2);
         }
 
-        String[] envVariables = {"QUARTORARIE_MONGODB_HOST", "QUARTORARIE_MONGODB_PORT", "QUARTORARIE_MONGODB_DBNAME", "QUARTORARIE_MONGODB_USERNAME", "QUARTORARIE_MONGODB_PASSWORD"};
-
-        for (String envVariable : envVariables) {
-            String value = System.getenv(envVariable);
-            if (value == null || value.isEmpty()) {
-                System.err.println("Error: The environment variable " + envVariable + " is not defined or is empty.");
-                System.exit(3); // Esci dal programma con stato di errore
-            }
-        }
-
         logger.debug("Args received");
 
         // Setup file
@@ -105,18 +95,21 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFileName))) {
             if (mongoTemplate.indexOps(fileName + "_" + magnitude).getIndexInfo().stream()
-                    .anyMatch(indexInfo -> indexInfo.getName().equals(fileName + "_" + magnitude + "_java"))) {
+                    .anyMatch(indexInfo -> indexInfo.getName().equals(fileName + "_" + magnitude + "_java"))
+                && args[9] == "true"
+
+            ) {
                 mongoTemplate.indexOps(fileName + "_" + magnitude).dropIndex(fileName + "_" + magnitude + "_java");
+                logger.debug("Creating index " + fileName + "_" + magnitude + "_java");
+                mongoTemplate.indexOps(fileName + "_" + magnitude)
+                        .ensureIndex(
+                                new Index()
+                                        .on("POD", Sort.Direction.ASC)
+                                        .on("MEAS_YMDD_ID", Sort.Direction.ASC)
+                                        .named(fileName + "_" + magnitude + "_java")
+                        );
+                logger.debug("Index " + fileName + "_" + magnitude + " created");
             }
-            logger.debug("Creating index " + fileName + "_" + magnitude + "_java");
-            mongoTemplate.indexOps(fileName + "_" + magnitude)
-                    .ensureIndex(
-                            new Index()
-                                    .on("POD", Sort.Direction.ASC)
-                                    .on("MEAS_YMDD_ID", Sort.Direction.ASC)
-                                    .named(fileName + "_" + magnitude + "_java")
-                    );
-            logger.debug("Index " + fileName + "_" + magnitude + " created");
 
             // Get distinct PODs list
             AggregationOperation distinctPodGroupByPod = group("POD");
