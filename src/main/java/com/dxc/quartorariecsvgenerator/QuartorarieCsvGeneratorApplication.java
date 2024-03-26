@@ -94,12 +94,12 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFileName))) {
-            if (mongoTemplate.indexOps(fileName + "_" + magnitude).getIndexInfo().stream()
-                    .anyMatch(indexInfo -> indexInfo.getName().equals(fileName + "_" + magnitude + "_java"))
-                && args[9] == "true"
-
-            ) {
-                mongoTemplate.indexOps(fileName + "_" + magnitude).dropIndex(fileName + "_" + magnitude + "_java");
+            if (args[9].equalsIgnoreCase("true"))
+            {
+                if (mongoTemplate.indexOps(fileName + "_" + magnitude).getIndexInfo().stream()
+                        .anyMatch(indexInfo -> indexInfo.getName().equals(fileName + "_" + magnitude + "_java"))) {
+                    mongoTemplate.indexOps(fileName + "_" + magnitude).dropIndex(fileName + "_" + magnitude + "_java");
+                }
                 logger.debug("Creating index " + fileName + "_" + magnitude + "_java");
                 mongoTemplate.indexOps(fileName + "_" + magnitude)
                         .ensureIndex(
@@ -222,7 +222,7 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
                     writer.write(csvLine + "\n");
                     csvLine = "";
                 }
-                logger.debug("Written data from minDay = " + minDay + " to maxDay = " + maxDay + " in " + (System.currentTimeMillis() - startTimeMillis) + " milliseconds");
+                logger.debug("Written file " + fileName + "_" + magnitude + " data from minDay = " + minDay + " to maxDay = " + maxDay + " in " + (System.currentTimeMillis() - startTimeMillis) + " milliseconds");
 
                 minDay = maxDay;
                 calendar.setTime(datesFormat.parse(minDay));

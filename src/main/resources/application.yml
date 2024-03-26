@@ -11,4 +11,4 @@ logging:
   level:
     root: INFO
     com.dxc.quartorariecsvgenerator.QuartorarieCsvGeneratorApplication: DEBUG
-    org.springframework.data.mongodb.core.MongoTemplate: TRACE
+    org.springframework.data.mongodb.core.MongoTemplate: INFO
