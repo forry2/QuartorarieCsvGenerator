@@ -23,10 +23,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static java.lang.System.exit;
@@ -108,7 +105,7 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
                                         .on("MEAS_YMDD_ID", Sort.Direction.ASC)
                                         .named(fileName + "_" + magnitude + "_java")
                         );
-                logger.debug("Index " + fileName + "_" + magnitude + " created");
+                logger.info("Index " + fileName + "_" + magnitude + " created");
             }
 
             // Get distinct PODs list
@@ -117,7 +114,7 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
             Aggregation distinctPodAggregation = Aggregation.newAggregation(distinctPodGroupByPod, distinctPodSortByPod);
             AggregationResults<Document> distinctPod = mongoTemplate.aggregate(distinctPodAggregation, collectionName, Document.class);
             List<String> distinctPodList = distinctPod.getMappedResults().stream().map(doc -> doc.getString("_id")).collect(Collectors.toList());
-            logger.debug("List of distinct PODS has " + distinctPodList.size() + " elements");
+            logger.info("List of distinct PODS has " + distinctPodList.size() + " elements");
             if (distinctPodList.size() == 0) {
                 System.err.println("db returned no PODs to perform this operation");
                 exit(5);
@@ -156,6 +153,7 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
             // Looping through days
 
             HashMap<String, String> podValuesHashMap = new HashMap<>();
+            HashSet<String> podsWithSomeNullValues = new HashSet<>();
             while (StringUtils.compare(maxDay, endDate) <= 0) {
                 long startTimeMillis = System.currentTimeMillis();
                 podValuesHashMap.clear();
@@ -202,8 +200,13 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
                 logger.debug("Iterator cycle completed in " + (System.currentTimeMillis() - startTimeMillis) + " milliseconds");
                 */
 
+                String currVal = "";
                 for (Document doc : valDataAggregationResult.getMappedResults()) {
-                    podValuesHashMap.put(doc.getString("MEAS_YMDD_ID") + "_" + doc.getString("POD"), doc.getDouble("val") + "_" + doc.getString("MEAS_TYPE"));
+                    currVal = podValuesHashMap.get(doc.getString("MEAS_YMDD_ID") + "_" + doc.getString("POD"));
+                    if (currVal == null || currVal.startsWith("0.0_"))
+                        podValuesHashMap.put(doc.getString("MEAS_YMDD_ID") + "_" + doc.getString("POD"), doc.getDouble("val") + "_" + doc.getString("MEAS_TYPE"));
+                    else
+                        logger.warn("podValuesHashMap already contains value = " + currVal + " for key = " + doc.getString("MEAS_YMDD_ID") + "_" + doc.getString("POD"));
                 }
 
                 String csvLine = "";
@@ -216,13 +219,15 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
                         String values = podValuesHashMap.get(minDay + "_" + StringUtils.leftPad(String.valueOf(runningId), 2, "0") + "_" + runningPod);
 
                         csvLine += (values != null ? values : "") + ";";
+                        if (values == null)
+                            podsWithSomeNullValues.add(runningPod);
 
                     }
                     logger.trace(csvLine);
                     writer.write(csvLine + "\n");
                     csvLine = "";
                 }
-                logger.debug("Written file " + fileName + "_" + magnitude + " data from minDay = " + minDay + " to maxDay = " + maxDay + " in " + (System.currentTimeMillis() - startTimeMillis) + " milliseconds");
+                logger.info("Written file " + fileName + "_" + magnitude + ".csv data from minDay = " + minDay + " to maxDay = " + maxDay + " in " + (System.currentTimeMillis() - startTimeMillis) + " milliseconds");
 
                 minDay = maxDay;
                 calendar.setTime(datesFormat.parse(minDay));
@@ -230,8 +235,10 @@ public class QuartorarieCsvGeneratorApplication implements CommandLineRunner {
                 maxDay = datesFormat.format(calendar.getTime());
             }
             mongoTemplate.indexOps(fileName + "_" + magnitude).dropIndex(fileName + "_" + magnitude + "_java");
+            logger.info("podsWithSomeNullValues contains " + podsWithSomeNullValues.size() + " elements:");
+            podsWithSomeNullValues.forEach(logger::info);
         }
-        logger.debug("File " + fileName + " written in " + (fileStartTimeMillis - System.currentTimeMillis()) + "ms");
+        logger.debug("File " + fileName + " written in " + (System.currentTimeMillis() - fileStartTimeMillis) + "ms");
     }
 
     private String idToString(int number) {
